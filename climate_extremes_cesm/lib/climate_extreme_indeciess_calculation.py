@@ -54,23 +54,17 @@ output:
 	6) rnm       : annual count of days woth precip >= nmm
 	7) cdd       : (consective dry days) maximum consecive days with rr<1mm
 	8) cwd       : (consective wet days) maximum consecive days with rr>=1mm
-	9) r95p      : (very wet days) annual total precp >95th percetile
-	10) r99p     : (extremely wet days) annual total precp >99th percetile
+	9) r95p      : (very wet days) annual total precp >95th percetile referring to 1961-1990
+	10) r99p     : (extremely wet days) annual total precp >99th percetile referring to 1961-1990
 	11) precptot : (annual total wet-day prrecip) annual total precp in wet days (rr>1mm)
 """
 
-def precip_extreme_indeces(precp_year_data,rnt):
+def precip_extreme_indeces(precp_year_data,r95p_threshold,r99p_threshold,rnt):
 	total_precip = np.nansum(precp_year_data, axis = 0)  # note here the first dimenssion rpresents time series
-	#min_precip = np.nanmin(precp_year_data, axis = 0)  # note here the first dimenssion rpresents time series
-	# print "shape of totel_precip: "
-	# print np.shape(total_precip)
-	# print total_precip
+	mean_prep = stats.nanmean(precp_year_data, axis = 0)
+	std_prep = stats.nanstd(precp_year_data, axis = 0)
 	rx1day =np.nanmax(precp_year_data,axis = 0)
-	# print "shape of rx1day: "
-	# print np.shape(rx1day)
-	# print rx1day
 	size_data = np.shape(precp_year_data)
-	# print size_data
 	# r10 r20 rnm sdii
 	def rnnmm(rnt, r1t=1, r10t=10, r20t=20):
 		#######################
@@ -95,14 +89,12 @@ def precip_extreme_indeces(precp_year_data,rnt):
 		r1 = np.empty((size_data[1],size_data[2]))
 		r1[:] = np.nan		
 
-				
 		for row in range(size_data[1]):
 			for colum in range(size_data[2]):
+				# r95p_threshold=np.percentile(prec_cache,95)
 				prec_cache = precp_year_data[:,row,colum]
-				r95p_threshold=np.percentile(prec_cache,95)
-				r95p[row,colum] = np.nansum([value for value in prec_cache if value > r95p_threshold ])
-				r99p_threshold=np.percentile(prec_cache,99)
-				r99p[row,colum] = np.nansum([value for value in prec_cache if value > r99p_threshold ])	
+				r95p[row,colum] = np.nansum([value for value in prec_cache if value > r95p_threshold[row,colum] ])
+				r99p[row,colum] = np.nansum([value for value in prec_cache if value > r99p_threshold[row,colum] ])	
 				# r1 r10 r20 rnm and prectot
 				r1[row,colum]=len([value for value in prec_cache if value >= r1t])
 				precptot[row,colum] = np.nansum([value for value in prec_cache if value >= r1t])
@@ -120,13 +112,12 @@ def precip_extreme_indeces(precp_year_data,rnt):
 							rx5day_cache = rx5day_cache+prec_cache[span]
 							if (rx5day_cache >= rx5day[row, colum]):
 								rx5day[row, colum] = rx5day_cache
-				
 		rnm[rnm < 0] = np.nan
 		rx5day[rx5day < 0] = np.nan
 		r1 = r1.astype('float')
 		r1[ r1 <= 0] = np.nan
 		sdii = np.divide(total_precip, r1)
-		return r10, r20, rnm, sdii, precptot, rx5day, rx1day, r95p, r99p, total_precip
+		return r10, r20, rnm, sdii, precptot, rx5day, rx1day, r95p, r99p
 	
 							
 	def cdd_cwd():
@@ -177,11 +168,10 @@ def precip_extreme_indeces(precp_year_data,rnt):
 							if (cdd_cache >= cdd[row, colum]):
 								cdd[row, colum]=cdd_cache
 		return cdd,cwd
-	r10, r20, rnm, sdii, precptot, rx5day, rx1day, r95p, r99p, total_precip= rnnmm(rnt, r1t=1, r10t=10, r20t=20)
+	r10, r20, rnm, sdii, precptot, rx5day, rx1day, r95p, r99p= rnnmm(rnt, r1t=1, r10t=10, r20t=20)
 	cdd,cwd = cdd_cwd()
 	
-	
-	return r10, r20, rnm, sdii, precptot, rx5day, rx1day, r95p, r99p, cdd, cwd,total_precip
+	return r10, r20, rnm, sdii, precptot, rx5day, rx1day, r95p, r99p, cdd, cwd, total_precip, mean_prep, std_prep
 
 
 
@@ -206,13 +196,17 @@ output:
 	13)dtr 		: (diurnal temperature range) annual mean differance between TX and TN  
 	14)tnn		: (min tmin) annual minimum of daily minimum
 """
-def temperature_extreme_indeces(daily_minimum_year,daily_maximum_year):
+def temperature_extreme_indeces(daily_minimum_year,daily_maximum_year,tn10p_min_threshold,tn90p_min_threshold,tx10p_max_threshold,tx90p_max_threshold):
 	size_data = np.shape(daily_minimum_year)
 	txx = np.nanmax(daily_maximum_year, axis=0)
 	txn = np.nanmin(daily_maximum_year, axis=0)
 	tnx = np.nanmax(daily_minimum_year, axis=0)
 	tnn = np.nanmin(daily_minimum_year, axis=0)
 	dtr = stats.nanmean(daily_maximum_year - daily_minimum_year, axis = 0)
+	mean_tn = stats.nanmean(daily_minimum_year, axis = 0)
+	mean_tx = stats.nanmean(daily_maximum_year, axis = 0)
+	std_tx = stats.nanstd(daily_maximum_year, axis = 0)
+	std_tn = stats.nanstd(daily_minimum_year, axis = 0)
 	
 	fd0 = np.empty((size_data[1],size_data[2]))
 	fd0[:] = np.nan
@@ -230,7 +224,6 @@ def temperature_extreme_indeces(daily_minimum_year,daily_maximum_year):
 	tn90p[:] = np.nan	
 	tx10p = np.empty((size_data[1],size_data[2]))
 	tx10p[:] = np.nan	
-	
 	for row in range(size_data[1]):
 		for colum in range(size_data[2]):
 			min_temp_cache = daily_minimum_year[:,row,colum]
@@ -239,12 +232,8 @@ def temperature_extreme_indeces(daily_minimum_year,daily_maximum_year):
 			su25[row,colum] = len([value for value in max_temp_cache if value> 25])
 			id0[row,colum] = len([value for value in max_temp_cache if value< 0])
 			tr20[row,colum] = len ([value for value in min_temp_cache if value> 20])
-			tn10p_min_threshold = np.percentile(min_temp_cache,10)
-			tn10p[row,colum] = len([value for value in min_temp_cache if value< tn10p_min_threshold] )/ float(size_data[0])
-			tn90p_min_threshold = np.percentile(min_temp_cache,90)
-			tn90p[row,colum] = len([value for value in min_temp_cache if value> tn90p_min_threshold] )/ float(size_data[0])
-			tx10p_max_threshold = np.percentile(max_temp_cache,10)
-			tx10p[row,colum] = len([value for value in max_temp_cache if value< tx10p_max_threshold] )/ float(size_data[0])
-			tx90p_max_threshold = np.percentile(max_temp_cache,90)	
-			tx90p[row,colum] = len([value for value in max_temp_cache if value> tx90p_max_threshold] )/ float(size_data[0])
-	return txx, txn, tnx, tnn, dtr, fd0, su25, id0, tr20, tn10p, tn90p, tx10p, tx90p
+			tn10p[row,colum] = 100*len([value for value in min_temp_cache if value< tn10p_min_threshold[row,colum]])/ float(len(min_temp_cache))
+			tn90p[row,colum] = 100*len([value for value in min_temp_cache if value> tn90p_min_threshold[row,colum]])/ float(len(min_temp_cache))
+			tx10p[row,colum] = 100*len([value for value in max_temp_cache if value< tx10p_max_threshold[row,colum]])/ float(len(max_temp_cache))
+			tx90p[row,colum] = 100*len([value for value in max_temp_cache if value> tx90p_max_threshold[row,colum]])/ float(len(max_temp_cache))
+	return mean_tx,mean_tn,std_tx,std_tn,txx, txn, tnx, tnn, dtr, fd0, su25, id0, tr20, tn10p, tn90p, tx10p, tx90p

@@ -1,49 +1,48 @@
-from mpl_toolkits.basemap import Basemap, shiftgrid, maskoceans, interp
-import numpy as np 
+# -*- coding: utf-8 -*-
+"""
+Created on Jan 25 2017
+This is to convert the world ocean_land map mask from 1440*720 into needed resolution
+@author: Alcide.Zhao
+"""
+
+import numpy as np
+import scipy.io as spio
+# from scipy.interpolate import interp2d
+from scipy.interpolate import RectBivariateSpline as RectBivariateSpline
+
+import netCDF4 as nc4
 import matplotlib.pyplot as plt
 
-# example showing how to mask out 'wet' areas on a contour or pcolor plot.
 
-topodatin = np.loadtxt('etopo20data.gz')
-lonsin = np.loadtxt('etopo20lons.gz')
-latsin = np.loadtxt('etopo20lats.gz')
+lat_res = 0.5;lon_res = 0.5;
+lat_grid= int(180/lat_res);lon_grid= int(360/lon_res);
+oceanmask=spio.loadmat('/home/s1667168/coding/python/climate_extremes_cesm/external_data/world.oceanmask.1440x720')['landocean']
+y = np.arange(0,lat_grid,lat_grid/720.0)
+x = np.arange(0,lon_grid,lon_grid/1440.0)
+# xi, yi = np.meshgrid(x, y)
+y_new = range(lat_grid)
+x_new = range(lon_grid)
+print np.shape(y)
+print np.shape(x)
+f = RectBivariateSpline(y, x, oceanmask)
 
-# shift data so lons go from -180 to 180 instead of 20 to 380.
-topoin,lons1 = shiftgrid(180.,topodatin,lonsin,start=False)
-lats1 = latsin
+ocean_mask = np.empty((lat_grid,lon_grid))
+ocean_mask = np.flipud(f(y_new,x_new))
+cache = np.empty((lat_grid,lon_grid))
 
-fig=plt.figure()
-# setup basemap
-m=Basemap(resolution='l',projection='lcc',lon_0=-100,lat_0=40,width=8.e6,height=6.e6)
-lons, lats = np.meshgrid(lons1,lats1)
-x, y = m(lons, lats)
-# interpolate land/sea mask to topo grid, mask ocean values.
-# output may look 'blocky' near coastlines, since data is at much
-# lower resolution than land/sea mask.
-topo = maskoceans(lons, lats, topoin)
-# make contour plot (ocean values will be masked)
-CS=m.contourf(x,y,topo,np.arange(-300,3001,50),cmap=plt.cm.jet,extend='both')
-#im=m.pcolormesh(x,y,topo,cmap=plt.cm.jet,vmin=-300,vmax=3000)
-# draw coastlines.
-m.drawcoastlines()
-plt.title('ETOPO data with marine areas masked (original grid)')
+# make the longitudes from 0 to 360
+cache[:,0:int(lon_grid/2)] = ocean_mask[:,int(lon_grid/2):lon_grid]
+cache[:,int(lon_grid/2):lon_grid] = ocean_mask[:,0:int(lon_grid/2)]
+ocean_mask = cache
+# make the land to be 1 and ocean to be 0
+ocean_mask[ocean_mask<125] =0
+ocean_mask[ocean_mask>=125] =1
+ocean_mask[0,:]=1
 
-fig=plt.figure()
-# interpolate topo data to higher resolution grid (to better match
-# the land/sea mask). Output looks less 'blocky' near coastlines.
-nlats = 3*topoin.shape[0]
-nlons = 3*topoin.shape[1]
-lons = np.linspace(-180,180,nlons)
-lats = np.linspace(-90,90,nlats)
-lons, lats = np.meshgrid(lons, lats)
-x, y = m(lons, lats)
-topo = interp(topoin,lons1,lats1,lons,lats,order=1)
-# interpolate land/sea mask to topo grid, mask ocean values.
-topo = maskoceans(lons, lats, topo)
-# make contour plot (ocean values will be masked)
-CS=m.contourf(x,y,topo,np.arange(-300,3001,50),cmap=plt.cm.jet,extend='both')
-#im=m.pcolormesh(x,y,topo,cmap=plt.cm.jet,vmin=-300,vmax=3000)
-# draw coastlines.
-m.drawcoastlines()
-plt.title('ETOPO data with marine areas masked (data on finer grid)')
+
+plt.imshow(ocean_mask, origin = 'lower')
 plt.show()
+file_name='/home/s1667168/coding/python/climate_extremes_cesm/external_data/\
+landoceanmask_'+str(lat_grid)+'_'+str(lon_grid)+'.mat'
+mdict={'landoceanmask':ocean_mask}
+spio.savemat(file_name, mdict)

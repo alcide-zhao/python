@@ -9,7 +9,7 @@ import os
 import time as clock
 import numpy as np
 import netCDF4 as nc4
-import matplotlib.pyplot as plt
+from scipy import stats
 
 
 lib_path = os.path.join(
@@ -21,7 +21,7 @@ lib_path = os.path.join(
 )
 
 site.addsitedir(lib_path)
-from lib import ncdump
+
 from lib.climate_extreme_indeciess_calculation import temperature_extreme_indeces as teic
  
 
@@ -221,9 +221,9 @@ def netcdf4_write(file_name,year_series,lon,lat,txx, txn, tnx, tnn, dtr, fd0, su
 ########################################################
 #0. setting variables
 ########################################################
-# linuc path
-input_path_mn = '/exports/csce/datastore/geos/users/s1667168/CESM/TEMP/large_unemble_rcp8.5_2006_2010_tempmn'
-input_path_mx = '/exports/csce/datastore/geos/users/s1667168/CESM/TEMP/large_unemble_rcp8.5_2006_2010_tempmx'
+# linux path
+input_path_mn = '/exports/csce/datastore/geos/users/s1667168/CESM/TEMP/medium_unemble_rcp8.5_fixA2005_2006_2010_trefhtmn'
+input_path_mx = '/exports/csce/datastore/geos/users/s1667168/CESM/TEMP/medium_unemble_rcp8.5_fixA2005_2006_2010_trefhtmx'
 
 ########################################################
 #1. find all .nc files that need to be extracted to be read
@@ -242,7 +242,7 @@ text_content_mx = text_file_mx.readlines()
 #2. read in the .nc file and then calculate indexies, 
 #######################################################
 
-for ensumble_member in range(48,54): 
+for ensumble_member in range(8,10): 
 	#######################
 	# 2.1 file loading
 	#######################
@@ -251,7 +251,7 @@ for ensumble_member in range(48,54):
 	#    month = name[4:6]
 	#    year  = name[0:4]
 	nc_f_mn = text_content_mn[ensumble_member][:-1]
-	print nc_f_mn
+	# print nc_f_mn
 	nc_fid_mn = nc4.Dataset(nc_f_mn,mode='r')
 	# nc_attrs, nc_dims, nc_vars = ncdump(nc_fid, False)
     #print nc_attrs
@@ -302,20 +302,50 @@ for ensumble_member in range(48,54):
 	tx90p = np.empty((len(year_series),size_data[1],size_data[2]))
 	tx90p[:] = np.nan	
 	
+	
+	
+	# produce the reference data for calculating tn10p and so on
+	temp_mn_refer = np.empty((5,92,size_data[1],size_data[2]))
+	temp_mn_refer[:] = np.nan	
+	temp_mx_refer = np.empty((5,92,size_data[1],size_data[2]))
+	temp_mx_refer[:] = np.nan	
+	tn10p_min_threshold = np.empty((size_data[1],size_data[2]))
+	tn10p_min_threshold[:] = np.nan	
+	tn90p_min_threshold = np.empty((size_data[1],size_data[2]))
+	tn90p_min_threshold[:] = np.nan	
+	tx10p_max_threshold = np.empty((size_data[1],size_data[2]))
+	tx10p_max_threshold[:] = np.nan	
+	tx90p_max_threshold = np.empty((size_data[1],size_data[2]))
+	tx90p_max_threshold[:] = np.nan	
+	
+	layer_e = -123
+	for layer in range(5):
+		layer_b = layer_e + 274
+		layer_e = layer_b + 91
+		temp_mn_refer[layer,:,:,:] = temp_mn[layer_b:layer_e+1,:,:]
+		temp_mx_refer[layer,:,:,:] = temp_mx[layer_b:layer_e+1,:,:]
+	temp_mn_refer_3d =stats.nanmean(temp_mn_refer,axis=0)
+	temp_mx_refer_3d =stats.nanmean(temp_mx_refer,axis=0)
+	tn10p_min_threshold[:] = np.percentile(temp_mn_refer_3d,10,axis=0) 
+	tn90p_min_threshold[:] = np.percentile(temp_mn_refer_3d,90,axis=0) 
+	tx10p_max_threshold[:] = np.percentile(temp_mx_refer_3d,10,axis=0) 
+	tx90p_max_threshold[:] = np.percentile(temp_mx_refer_3d,90,axis=0) 
 	layer_output = 0 # the time dimenssion of the output variable
-	layer_e = -123   # In order to let the first year behins from the 152 day 274-213=151
+	layer_e = -123   # In order to let the first year behins from the 151 day 274-213=151
+	
 	for iyear in year_series:	
 		layer_b = layer_e + 274
-		layer_e = layer_b + 91 # this should depends on if the year is leapyear or not,but here 364 because all CESM year are with 364 days
+		layer_e = layer_b + 91 # this should depend on if the year is leapyear or not,but here 364 because all CESM year are with 364 days
 		# layer_index = [layer for layer in range(len(year)) if year[layer] == iyear]
 		# layer_b = np.min(layer_index)
 		# layer_e = np.max(layer_index)
-		temp_jja_mn = temp_mn[layer_b:layer_e,:,:]
-		temp_jja_mx = temp_mx[layer_b:layer_e,:,:]
+		temp_jja_mn = temp_mn[layer_b:layer_e+1,:,:]
+		temp_jja_mx = temp_mx[layer_b:layer_e+1,:,:]
 		# r10, r20, rnm, sdii, precptot, rx5day, rx1day, r95p, r99p, cdd, cwd
 		
 		txx[layer_output,:,:], txn[layer_output,:,:], tnx[layer_output,:,:], tnn[layer_output,:,:], dtr[layer_output,:,:], fd0[layer_output,:,:], su25[layer_output,:,:],\
-		id0[layer_output,:,:], tr20[layer_output,:,:], tn10p[layer_output,:,:], tn90p[layer_output,:,:], tx10p[layer_output,:,:], tx90p[layer_output,:,:] = teic(temp_jja_mn,temp_jja_mx)
+		id0[layer_output,:,:], tr20[layer_output,:,:], tn10p[layer_output,:,:], tn90p[layer_output,:,:], tx10p[layer_output,:,:], tx90p[layer_output,:,:] = teic(temp_jja_mn,temp_jja_mx,tn10p_min_threshold,\
+		tn90p_min_threshold,tx10p_max_threshold,tx90p_max_threshold)
 		
 		print str(iyear)+" passed to layer " +str(layer_output) 
 		layer_output = layer_output+1
@@ -323,7 +353,7 @@ for ensumble_member in range(48,54):
 	#######################
 	# 2.3 write results into nc file
 	#######################
-	file_name = input_path_mn + '/'+os.path.basename(input_path_mn)+'_member'+str(['_0'+str(ensumble_member+1) if ensumble_member<9 else '_'+str(ensumble_member+1)])[2:5] + '_EI_JJA.nc'
+	file_name = input_path_mn + '/'+os.path.basename(input_path_mn)+str(['_0'+str(ensumble_member+1) if ensumble_member<9 else '_'+str(ensumble_member+1)])[2:5] + '_EI_JJA.nc'
 	# time = year_series.astype('int')
 	# print "r99p"
 	# print r99p

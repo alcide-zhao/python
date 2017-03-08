@@ -21,11 +21,8 @@ lib_path = os.path.join(
 )
 
 site.addsitedir(lib_path)
-from lib import ncdump
 from lib.climate_extreme_indeciess_calculation import precip_extreme_indeces as peic
  
-
-
 #leapyear judgement
 def leapyear(iyear):
 	leapyear = False
@@ -40,11 +37,13 @@ def leapyear(iyear):
 			else:
 				leapyear = False
 
+
+
 ########################################################
 # nc data writing
 ########################################################
-def netcdf4_write(file_name,year_series,lon,lat,rx1day, rx5day, sdii, r10, r20, rnm, cdd, cwd, r95p, r99p, precptot, total_precip):
-
+def netcdf4_write(file_name,year_series,lon,lat,rx1day, rx5day, sdii, r10, r20, rnm, cdd, cwd, r95p, r99p, precptot, total_precip, mean_prep, std_prep,MPI):
+	
 	"""
 	Here is how you would normally create and store data in a netCDF file:
     1) Open/create a netCDF dataset.
@@ -112,7 +111,10 @@ def netcdf4_write(file_name,year_series,lon,lat,rx1day, rx5day, sdii, r10, r20, 
 	r99ps = f.createVariable('r99p',np.float32,('time','lat','lon'))
 	prcptots = f.createVariable('precptot',np.float32,('time','lat','lon'))
 	total_precips = f.createVariable('total_precip',np.float32,('time','lat','lon'))
-
+	mean_preps = f.createVariable('mean_precip',np.float32,('time','lat','lon'))
+	std_preps = f.createVariable('std_precip',np.float32,('time','lat','lon'))
+	MPIs = f.createVariable('MPI',np.float32,('time','lat','lon'))
+	
 	#4) Passing data into variables
 	times[:] = year_series
 	latitudes[:] = lat
@@ -129,7 +131,9 @@ def netcdf4_write(file_name,year_series,lon,lat,rx1day, rx5day, sdii, r10, r20, 
 	r99ps[:] =  r99p
 	prcptots[:] =  precptot
 	total_precips[:] = total_precip 
-
+	mean_preps[:] = mean_prep
+	std_preps[:] = std_prep
+	MPIs[:] = MPI
 	
 	# 5) Add attributes to the variables and dataset (optional but recommended).
 	"""
@@ -220,6 +224,8 @@ def netcdf4_write(file_name,year_series,lon,lat,rx1day, rx5day, sdii, r10, r20, 
 	total_precips.long_name = 'annual total precipitation'
 	total_precips.units = 'mm'
 	
+	MPIs.standard_name = 'Monsoon Precipitation Index'
+	MPIs.Long_name = 'Ratio of local summer(MJJAS)-winter(NDJFM) to the annual total for the North Hemisphere'
 	f.close()
 	
 	return
@@ -229,22 +235,21 @@ def netcdf4_write(file_name,year_series,lon,lat,rx1day, rx5day, sdii, r10, r20, 
 #0. setting variables
 ########################################################
 # linuc path
-input_path = '/exports/csce/datastore/geos/users/s1667168/CESM/PRECi/medium_unemble_rcp8.5_fixA2005_2006_2010_precipitation'
-
-
-########################################################
-#1. find all .nc files that need to be extracted to be read
-########################################################
+input_path = '/exports/csce/datastore/geos/users/s1667168/CESM/Aerosol_cloud_dynamic_thermodynamic_hydro/PRECT/'
 os.system('find ' + os.path.abspath(input_path) + ' -name "*' + '.nc' + '" -print | sort > ' + input_path + '/file_list.txt')
 text_file = open(input_path + '/file_list.txt', "r")
 text_content = text_file.readlines()
 # rntprint text_file 
-    
 #######################################################
 #2. read in the .nc file and then calculate indexies, 
 #######################################################
+threshold_file = '/exports/csce/datastore/geos/users/s1667168/CESM/Aerosol_cloud_dynamic_thermodynamic_hydro/precip_9599_thre.nc'
+nc_fid = nc4.Dataset(threshold_file,mode='r')
+r95p_threshold = nc_fid.variables['r95pt']
+r99p_threshold = nc_fid.variables['r99pt']
 
-for ensumble_member in range(12,15): 
+
+for ensumble_member in range(0,30): 
 	#######################
 	# 2.1 file loading
 	#######################
@@ -254,85 +259,97 @@ for ensumble_member in range(12,15):
 	#    year  = name[0:4]
 	nc_f = text_content[ensumble_member][:-1]
 	nc_fid = nc4.Dataset(nc_f,mode='r')
-	nc_attrs, nc_dims, nc_vars = ncdump(nc_fid, False)
-    #print nc_attrs
-    #print nc_dims
-    #print nc_vars
+	# nc_attrs, nc_dims, nc_vars = ncdump(nc_fid, False)
 	lat = nc_fid.variables['lat']
-	# print lats
 	lon = nc_fid.variables['lon']
 	time = nc_fid.variables['date']
-	# print lons
 	precip = nc_fid.variables['PRECT'][:,:,:]
     #sm = sm_all_time[0,:,:]#only one time slice in this dataset
     #sm = sm_all_time[0,::-1,:]#without ::-1, the image is upside down.
-	precip[precip<0]=np.nan
-	# print type(precip)
+	precip[precip <0]=np.nan
 	
 	#######################
 	# 2.2 calculation 
 	#######################
 	size_data = np.shape(precip)
 	year= [ iyear/10000 for iyear in map(int,time)]
-	year_series = [value for value in np.unique(year) if value <=2100]
-	# year_series = np.array([2006,2007])
-	# print year_series
+	year_series = [value for value in np.unique(year) if value <=2005]
 	
 	#  varibale initialization 
-	r10 = np.empty((len(year_series),size_data[1],size_data[2]))
-	r10[:] = np.nan
-	r20 = np.empty((len(year_series),size_data[1],size_data[2]))
-	r20[:] = np.nan
-	rnm = np.empty((len(year_series),size_data[1],size_data[2]))
-	rnm[:] = np.nan
-	sdii = np.empty((len(year_series),size_data[1],size_data[2]))
-	sdii[:] = np.nan
-	precptot = np.empty((len(year_series),size_data[1],size_data[2]))
-	precptot[:] = np.nan
-	rx5day = np.empty((len(year_series),size_data[1],size_data[2]))
-	rx5day[:] = np.nan
-	rx1day = np.empty((len(year_series),size_data[1],size_data[2]))
-	rx1day[:] = np.nan
-	r95p = np.empty((len(year_series),size_data[1],size_data[2]))
-	r95p[:] = np.nan
-	r99p = np.empty((len(year_series),size_data[1],size_data[2]))
-	r99p[:] = np.nan
-	cdd = np.empty((len(year_series),size_data[1],size_data[2]))
-	cdd[:] = np.nan
-	cwd = np.empty((len(year_series),size_data[1],size_data[2]))
-	cwd[:] = np.nan
-	total_precip = np.empty((len(year_series),size_data[1],size_data[2]))
-	total_precip[:] = np.nan	
-	
+	r10 = np.empty((len(year_series),size_data[1],size_data[2]));	r10[:] = np.nan
+	r20 = np.empty((len(year_series),size_data[1],size_data[2]));	r20[:] = np.nan
+	rnm = np.empty((len(year_series),size_data[1],size_data[2]));	rnm[:] = np.nan
+	sdii = np.empty((len(year_series),size_data[1],size_data[2]));	sdii[:] = np.nan
+	precptot = np.empty((len(year_series),size_data[1],size_data[2]));	precptot[:] = np.nan
+	rx5day = np.empty((len(year_series),size_data[1],size_data[2]));	rx5day[:] = np.nan
+	rx1day = np.empty((len(year_series),size_data[1],size_data[2]));	rx1day[:] = np.nan
+	cdd = np.empty((len(year_series),size_data[1],size_data[2]));	cdd[:] = np.nan
+	cwd = np.empty((len(year_series),size_data[1],size_data[2]));	cwd[:] = np.nan
+	total_precip = np.empty((len(year_series),size_data[1],size_data[2])); total_precip[:] = np.nan	
+	r95p = np.empty((len(year_series),size_data[1],size_data[2])); r95p[:] = np.nan
+	r99p = np.empty((len(year_series),size_data[1],size_data[2])); r99p[:] = np.nan
+	mean_prep = np.empty((len(year_series),size_data[1],size_data[2])); mean_prep[:] = np.nan
+	std_prep = np.empty((len(year_series),size_data[1],size_data[2]));std_prep[:] = np.nan	
+	MPI = np.empty((len(year_series),size_data[1],size_data[2])); MPI[:] = np.nan
 	
 	layer_output = 0 # the time dimenssion of the output variable
-	layer_e = -123   # In order to let the first year behins from the 152 day 274-123=151
+	layer_JJA_e = -123   # In order to let the first day behins from the 152 day 274-123=151
+	layer_annual_e = -1 # In order to let the first day behins from the 0 day  1-1=0
+	layer_summer_e = -93 # In order to let the first day behins from the 0 day 213-93=120
+	layer_winter_e = -62 # In order to let the first day behins from the 152-62=90 day 
 	for iyear in year_series:	
-		layer_b = layer_e + 274
-		layer_e = layer_b + 91 # this should depends on if the year is leapyear or not,but here 364 because all CESM year are with 364 days
-		# layer_index = [layer for layer in range(len(year)) if year[layer] == iyear]
-		# layer_b = np.min(layer_index)
-		# layer_e = np.max(layer_index)
-		precp_year_data = precip[layer_b:layer_e,:,:]*24*60*60*1000
+		""" 
+		CESM DATA
+		"""
+		# layer_range = range((iyear-year_series[0])*365,(iyear-year_series[0]+1)*365)
+		# summer_pa = np.sum([precip[layer,:,:] for layer in layer_range if (time[layer] >= iyear*10000+501 and time[layer] <= iyear*10000+930)],axis=0)
+		# winter_pa = np.sum([precip[layer,:,:] for layer in layer_range if ((time[layer] >= iyear*10000+1101 and time[layer] <= iyear*10000+1231) or (time[layer] >= iyear*10000+101 and time[layer] <= iyear*10000+331) ) ],axis=0)			
+
+		# The Monsoon Precipitation Index
+		layer_annual_b = layer_annual_e+1
+		layer_annual_e = layer_annual_b+364
+		annual_pa = np.nansum(precip[layer_annual_b:layer_annual_e+1,:,:],axis=0)
 		
+		layer_summer_b = layer_summer_e+213
+		layer_summer_e = layer_summer_b+152
+		summer_pa = np.nansum(precip[layer_summer_b:layer_summer_e+1,:,:],axis=0)		
+		 
+		layer_winter_b = layer_winter_e+152
+		layer_winter_e = layer_winter_b+213
+		winter_pa = annual_pa - np.nansum(precip[layer_winter_b:layer_winter_e+1,:,:],axis=0)		
+		
+		MPI[layer_output,:,:] = np.divide((summer_pa-winter_pa),annual_pa)
+		
+		# layer_b = [layer for layer in layer_range if time[layer] == iyear*10000+601][0]
+		# layer_e = [layer for layer in layer_range if time[layer] == iyear*10000+831][0]
+		layer_JJA_b = layer_JJA_e+274
+		layer_JJA_e = layer_JJA_b+91
+		precp_year_data = precip[layer_JJA_b:layer_JJA_e+1,:,:]*24*60*60*1000  # from m/s to mmper day 
+		"""
+		APHRO Observations
+		"""	
+		# if leapyear(iyear):
+			# layer_b = [layer for layer in range(len(time)) if time[layer] == iyear*1000+153][0]
+			# layer_e = [layer for layer in range(len(time)) if time[layer] == iyear*1000+243][0]
+		# else:
+			# layer_b = [layer for layer in range(len(time)) if time[layer] == iyear*1000+152][0]
+			# layer_e = [layer for layer in range(len(time)) if time[layer] == iyear*1000+242][0]
+		# precp_year_data = precip[layer_b:layer_e+1,:,:] 		
 		# r10, r20, rnm, sdii, precptot, rx5day, rx1day, r95p, r99p, cdd, cwd
 		r10[layer_output,:,:], r20[layer_output,:,:], rnm[layer_output,:,:], sdii[layer_output,:,:], precptot[layer_output,:,:], rx5day[layer_output,:,:], rx1day[layer_output,:,:],\
-		r95p[layer_output,:,:], r99p[layer_output,:,:], cdd[layer_output,:,:], cwd[layer_output,:,:], total_precip[layer_output,:,:]= peic(precp_year_data,rnt = 30)
+		r95p[layer_output,:,:], r99p[layer_output,:,:], cdd[layer_output,:,:], cwd[layer_output,:,:], total_precip[layer_output,:,:],mean_prep[layer_output,:,:], std_prep[layer_output,:,:]= peic(precp_year_data,r95p_threshold, r99p_threshold,rnt = 30)
 		
 		print str(iyear)+" passed to layer " +str(layer_output) 
 		layer_output = layer_output+1
-		
 	#######################
 	# 2.3 write results into nc file
 	#######################
 	# note here ensumble_member begins from 1 while the loop begins from 0
 	# this is the ensumble_member+1 is performed for the output nc file name
-	file_name = input_path + '/'+os.path.basename(input_path)+'member'+str(['_0'+str(ensumble_member+1) if ensumble_member<9 else '_'+str(ensumble_member+1)])[2:5] + '_EI_JJA.nc'
+	file_name = input_path + 'CESM_PrepEI_1920_2005'+str(['_0'+str(ensumble_member+1) if ensumble_member<9 else '_'+str(ensumble_member+1)])[2:5] + '_JJA.nc'
 	# time = year_series.astype('int')
 	# print "r99p"
 	# print r99p
-	
-	netcdf4_write(file_name, year_series, lon, lat, rx1day, rx5day, sdii, r10, r20, rnm, cdd, cwd, r95p, r99p, precptot, total_precip)
+	netcdf4_write(file_name, year_series, lon, lat, rx1day, rx5day, sdii, r10, r20, rnm, cdd, cwd, r95p, r99p, precptot, total_precip,mean_prep,std_prep,MPI)
 	print "Data stored for unsemble "+ str(ensumble_member+1)
 	nc_fid.close()
-	
