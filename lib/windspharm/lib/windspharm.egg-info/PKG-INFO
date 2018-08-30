@@ -1,0 +1,14 @@
+Metadata-Version: 1.0
+Name: windspharm
+Version: 1.5.1
+Summary: vector wind analysis in spherical coordinates
+Home-page: http://ajdawson.github.com/windspharm/
+Author: Andrew Dawson
+Author-email: dawson@atm.ox.ac.uk
+License: UNKNOWN
+Description: 
+              windspharm provides a simple interface for doing calculations on
+              vector wind fields (e.g., computing streamfunction) in spherical
+              geometry using spherical harmonics
+              
+Platform: UNKNOWN

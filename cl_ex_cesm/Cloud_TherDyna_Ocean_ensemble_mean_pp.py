@@ -1,0 +1,202 @@
+'''
+Thi is to preprocess the cloud, ocean, atmospheric dynamics and thermodynamics data into ensumble means
+By Alcide Zhao at the UoE 
+'''
+
+import netCDF4 as nc4
+import numpy as np
+from scipy import stats
+import math
+import time as clock
+import glob  
+
+#############################################
+# 0.0 data input
+#############################################
+variable='TGCLDLWP'
+output_path = '/exports/csce/datastore/geos/users/s1667168/CESM/Aerosol_cloud_dynamic_thermodynamic_hydro/'
+file_name_out = output_path+'ensumble_mean_'+variable+'_200602_210101.nc'
+
+
+#############################################
+# 1 ensumble mean 3D data
+#############################################
+# def ensumble_mean_of_Dynamics_Thermodynamics(files):
+	# att_value = np.empty((30,1140,192,288)) #1140
+	# att_value[:] =np.nan
+	# ensumble_no = 0
+	# for file in files:
+		# # print file
+		# nc_fid = nc4.Dataset(file,mode='r')
+		# lat = nc_fid.variables['lat'][:]
+		# lon = nc_fid.variables['lon'][:]
+		# time_series = nc_fid.variables['date'][:]
+		# att_value[ensumble_no,:,:,:] = nc_fid.variables[variable][:]
+		# units = nc_fid.variables[variable].units
+		# # units = 'mm/day'
+		# # long_name = 'JJA mean TS'
+		# long_name = nc_fid.variables[variable].long_name
+		# # missing_value = nc_fid.variables[variable].missing_value
+		# missing_value = np.nan
+		# ensumble_no=ensumble_no+1
+		# nc_fid.close()
+	# att_value[att_value == missing_value] =np.nan
+	# att_ensumble_mean = stats.nanstd(att_value,axis = 0)
+	# return lon,lat,time_series,att_ensumble_mean,units,missing_value,long_name
+
+def ensumble_mean_of_Dynamics_Thermodynamics(files):
+	att_ensumble_mean = np.empty((1140,192,288))
+	for time in range(1140):
+		att_value = np.empty((len(files),192,288))
+		ensumble_no = 0
+		for file in files:
+			# print file
+			nc_fid = nc4.Dataset(file,mode='r')
+			lat = nc_fid.variables['lat'][:]
+			lon = nc_fid.variables['lon'][:]
+			lev = nc_fid.variables['lev'][:]
+			# lev_sn= nc_fid.variables['lev'].standard_name
+			time_series = nc_fid.variables['date'][:]
+			att_value[ensumble_no,:,:] = nc_fid.variables[variable][time,:,:]
+			units = nc_fid.variables[variable].units
+			long_name = nc_fid.variables[variable].long_name
+			# missing_value = nc_fid.variables[variable].missing_values
+			missing_value = np.nan
+			ensumble_no=ensumble_no+1
+			nc_fid.close()
+		att_value[att_value == missing_value] =np.nan
+		att_ensumble_mean[time,:,:] = stats.nanmean(att_value,axis = 0)
+	return lon,lat,time_series,att_ensumble_mean,units,missing_value,long_name	
+	
+input_path = '/exports/csce/datastore/geos/users/s1667168/CESM/Aerosol_cloud_dynamic_thermodynamic_hydro/'+variable+'/rcp85/*.nc'
+files=sorted(glob.glob(input_path))
+lon,lat,time_series,att_ensumble_mean_rcp85,rcp85_units,rcp85_mv,rcp85_ln = ensumble_mean_of_Dynamics_Thermodynamics(files)
+input_path = '/exports/csce/datastore/geos/users/s1667168/CESM/Aerosol_cloud_dynamic_thermodynamic_hydro/'+variable+'/fixa/*.nc'
+files=sorted(glob.glob(input_path))
+lon,lat,time_series,att_ensumble_mean_rcp85_fixA,fixA_units,fixA_mv,fixA_ln = ensumble_mean_of_Dynamics_Thermodynamics(files)
+# input_path = '/exports/csce/datastore/geos/users/s1667168/CESM/Aerosol_cloud_dynamic_thermodynamic_hydro/'+variable+'/*.nc'
+# files=sorted(glob.glob(input_path))
+# lon,lat,time_series,att_ensumble_mean_rcp85,rcp85_units,rcp85_mv,rcp85_ln = ensumble_mean_of_Dynamics_Thermodynamics(files)
+
+
+######################################
+#1.1 writting the results into nc files
+######################################
+
+f = nc4.Dataset(file_name_out,'w', format='NETCDF4') #'w' stands for write
+f.createDimension('lat', len(lat))
+f.createDimension('lon', len(lon))
+f.createDimension('time', len(time_series))
+
+times = f.createVariable('time',np.float64, ('time'))
+latitudes = f.createVariable('lat',np.float32, ('lat'))
+longitudes = f.createVariable('lon',np.float32, ('lon'))
+
+rcp85s = f.createVariable('rcp85',np.float32,('time','lat','lon'))
+rcp85_fixAs = f.createVariable('rcp85_fixA',np.float32,('time','lat','lon'))
+	
+times[:] = time_series
+latitudes[:] = lat
+longitudes[:] = lon
+rcp85s[:]= att_ensumble_mean_rcp85
+rcp85_fixAs[:]= att_ensumble_mean_rcp85_fixA
+
+times.long_name = 'Month'
+times.units = 'Month'
+latitudes.long_name = 'latitude'
+latitudes.units = 'degree_north'
+longitudes.long_name = 'longitude'
+longitudes.units = 'degree_east'
+
+rcp85s.units=rcp85_units
+rcp85s.missing_value=rcp85_mv
+rcp85s.long_name =rcp85_ln
+rcp85_fixAs.units=fixA_units
+rcp85_fixAs.missing_value=fixA_mv
+rcp85_fixAs.long_name =fixA_ln
+
+f.description = 'Time series of ensemble std of '+variable+' calculated using the CESM model outputs'
+f.history = 'Created at ' + clock.asctime( clock.localtime(clock.time()))
+f.institution = 'Alcide Zhao at the university of Edinburgh'
+f.close()
+"""
+#############################################
+# 2 ensumble mean 4D data
+#############################################
+def ensumble_mean_of_Dynamics_Thermodynamics(files):
+	att_ensumble_mean = np.empty((1032,30,192,288))
+	for time in range(1032):
+		att_value = np.empty((len(files),30,192,288))
+		ensumble_no = 0
+		for file in files:
+			# print file
+			nc_fid = nc4.Dataset(file,mode='r')
+			lat = nc_fid.variables['lat'][:]
+			lon = nc_fid.variables['lon'][:]
+			lev = nc_fid.variables['lev'][:]
+			lev_sn= nc_fid.variables['lev'].standard_name
+			time_series = nc_fid.variables['date'][:]
+			att_value[ensumble_no,:,:,:] = nc_fid.variables[variable][time,:,:,:]
+			units = nc_fid.variables[variable].units
+			long_name = nc_fid.variables[variable].long_name
+			# missing_value = nc_fid.variables[variable].missing_values
+			missing_value = np.nan
+			ensumble_no=ensumble_no+1
+			nc_fid.close()
+		att_value[att_value == missing_value] =np.nan
+		att_ensumble_mean[time,:,:,:] = stats.nanmean(att_value,axis = 0)
+	return lon,lat,lev,lev_sn,time_series,att_ensumble_mean,units,missing_value,long_name
+	
+# input_path = '/exports/csce/datastore/geos/users/s1667168/CESM/Aerosol_cloud_dynamic_thermodynamic_hydro/'+variable+'/rcp85/*.nc'
+# files=sorted(glob.glob(input_path))
+# lon,lat,lev,lev_sn,time_series,att_ensumble_mean_rcp85,rcp85_units,rcp85_mv,rcp85_ln = ensumble_mean_of_Dynamics_Thermodynamics(files)
+# input_path = '/exports/csce/datastore/geos/users/s1667168/CESM/Aerosol_cloud_dynamic_thermodynamic_hydro/'+variable+'/fixa/*.nc'
+# files=sorted(glob.glob(input_path))
+# _,_,_,_,_,att_ensumble_mean_rcp85_fixA,fixA_units,fixA_mv,fixA_ln = ensumble_mean_of_Dynamics_Thermodynamics(files)
+
+	
+input_path = '/exports/csce/datastore/geos/users/s1667168/CESM/Aerosol_cloud_dynamic_thermodynamic_hydro/'+variable+'/*.nc'
+files=sorted(glob.glob(input_path))
+lon,lat,lev,lev_sn,time_series,att_ensumble_mean_rcp85,rcp85_units,rcp85_mv,rcp85_ln = ensumble_mean_of_Dynamics_Thermodynamics(files)
+
+f = nc4.Dataset(file_name_out,'w', format='NETCDF4') #'w' stands for write
+f.createDimension('lat', len(lat))
+f.createDimension('lon', len(lon))
+f.createDimension('time',len(time_series))
+f.createDimension('lev', len(lev))
+
+times = f.createVariable('time',np.float64, ('time'))
+latitudes = f.createVariable('lat',np.float32, ('lat'))
+longitudes = f.createVariable('lon',np.float32, ('lon'))
+levs = f.createVariable('lev',np.float32, ('lev'))
+
+rcp85s = f.createVariable('Historical',np.float32,('time','lev','lat','lon'))
+# rcp85_fixAs = f.createVariable('rcp85_fixA',np.float32,('time','lev','lat','lon'))
+	
+times[:] = time_series
+latitudes[:] = lat
+longitudes[:] = lon
+rcp85s[:]= att_ensumble_mean_rcp85
+# rcp85_fixAs[:]= att_ensumble_mean_rcp85_fixA
+levs[:] = lev
+
+times.long_name = 'Month'
+times.units = 'Month'
+latitudes.long_name = 'latitude'
+latitudes.units = 'degree_north'
+longitudes.long_name = 'longitude'
+longitudes.units = 'degree_east'
+levs.standard_name = lev_sn
+
+rcp85s.units=rcp85_units
+rcp85s.missing_value=rcp85_mv
+rcp85s.long_name =rcp85_ln
+# rcp85_fixAs.units=fixA_units
+# rcp85_fixAs.missing_value=fixA_mv
+# rcp85_fixAs.long_name =fixA_ln
+
+f.description = 'Time series of nsumble mean of '+variable+' calculated using the CESM model outputs'
+f.history = 'Created at ' + clock.asctime( clock.localtime(clock.time()))
+f.institution = 'Alcide Zhao at the university of Edinburgh'
+f.close()
+"""

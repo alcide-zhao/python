@@ -1,0 +1,13 @@
+# Absolute minimal dependencies for iris
+# --------------------------------------
+
+# Without these, iris won't even import.
+
+cartopy
+matplotlib<1.9
+netcdf4
+numpy
+scipy
+# pyke (not pip installable)  #conda: pyke
+cf_units
+dask>=0.15.0

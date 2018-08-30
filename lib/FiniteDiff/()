@@ -1,0 +1,67 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+
+def IniCon(x):
+	return np.where (x % 1. < 0.5, np.power(np.sin(2*x*np.pi),2), 0)
+
+def FiniteDiff_burger(nt, nx, c):
+	"""
+	Returns the velocity field and distance for 1D non-linear burger's equation 
+	input: no. of time points nt
+		   no. of space points nx 
+		   courant number C
+		
+	"""
+	# Increments
+	# dt = 1./(nt-1);  dx = 1./(nx-1)
+
+	# Initialise data structures
+	u = np.zeros((nx,nt))
+	x = np.linspace(0., 1., nx)
+	
+	# Initial condition
+	u[:,0] = IniCon(x)
+	# boundary condition
+	#Boundary conditions
+	u[0,:] = u[nx-1,:] = 0
+	# Loop over time
+	for n in range(0,nt-1):
+		# print dt/dx
+		# loop over space
+		for i in range(1,nx-1):
+			u[i,n+1] = u[i,n]-u[i,n]*(c)*(u[i,n]-u[i-1,n])
+	return u, x
+
+def plotburger(ax,u,x,nt,title):
+	"""
+	Plots the 1D velocity field
+	"""
+
+	color=iter(cm.jet(np.linspace(0,1,nt)))
+	for i in range(0,nt,1):
+		ax.plot(x,u[:,i],c=next(color))
+		plt.xlabel('x (m)')
+		plt.ylabel('u (m/s)')
+		plt.ylim([0,1])
+		plt.title(title)
+fig = plt.figure(facecolor='White',figsize=(16, 10));pad= 5; 
+ax = plt.subplot(2,2,1);
+u,x = FiniteDiff_burger(40, 40, 0.5)
+plotburger(ax,u,x,40,'(a): c=0.5m/s, nt=40,  nx=40 ')
+
+ax = plt.subplot(2,2,2);
+u,x = FiniteDiff_burger(40, 40, 0.1)
+plotburger(ax,u,x,40,'(b): c=0.1m/s,  nt=40,  nx=40 ')
+
+ax = plt.subplot(2,2,3);
+u,x = FiniteDiff_burger(80, 40, 0.5)
+plotburger(ax,u,x,80,'(c): c=0.5m/s,  nt=80,  nx=40 ')
+
+ax = plt.subplot(2,2,4);
+u,x = FiniteDiff_burger(80, 40, 0.1)
+plotburger(ax, u,x,80,'(d): c=0.1m/s,  nt=80,  nx=40 ')
+
+plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.1, hspace=0.2);
+plt.savefig('Burger_test.png', format='png', dpi=600)
+plt.show()

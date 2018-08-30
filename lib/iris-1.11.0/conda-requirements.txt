@@ -1,0 +1,35 @@
+# Use this file to create a conda environment using:
+# conda create -n <name> --file conda-requirements.txt
+
+# Mandatory dependencies
+biggus
+cartopy
+matplotlib
+netcdf4
+numpy
+pyke
+udunits2
+cf_units
+
+# Iris build dependencies
+setuptools
+
+# Iris testing/documentation dependencies
+mock
+nose
+pep8
+sphinx
+iris_sample_data
+filelock
+imagehash
+requests
+
+# Optional iris dependencies
+nc_time_axis
+iris_grib
+esmpy>=7.0
+gdal
+libmo_unpack
+pandas
+pyugrid
+mo_pack
